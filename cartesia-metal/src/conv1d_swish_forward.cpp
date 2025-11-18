@@ -7,6 +7,7 @@
 #include "mlx/utils.h"
 
 #include "src/conv1d_swish_forward.h"
+#include "src/metal_utils.h"
 
 #ifdef ACCELERATE_NEW_LAPACK
 #include <vecLib/cblas_new.h>
@@ -50,32 +51,27 @@ void Conv1dSwishForward::eval_gpu(const std::vector<array>& inputs, std::vector<
   assert(inputs.size() == 3);
   assert(outputs.size() == 1);
 
-  auto x = inputs[0];       // (b, d, l)
-  auto w = inputs[1];       // (d, k)
-  auto b = inputs[2];       // (d)
+  auto& x = inputs[0];       // (b, d, l)
+  auto& w = inputs[1];       // (d, k)
+  auto& b = inputs[2];       // (d)
 
-  auto y = outputs[0];
+  auto& y = outputs[0];
 
   auto& s = stream();
   auto& d = metal::device(s.device);
 
-  y.set_data(
-    allocator::malloc_or_wait(x.data_size() * y.itemsize()),
-    x.data_size(),
-    x.strides(),
-    x.flags()
-  );
+  y.set_data(allocator::malloc(y.nbytes()));
 
   std::ostringstream kname;
   kname << "conv1d_swish_forward_kernel_";
   kname << type_to_name(x);
-  
-  d.register_library("mlx_ext");
-  auto kernel = d.get_kernel(kname.str(), "mlx_ext");
+
+  auto lib = d.get_library("mlx_ext", cartesia::mlx_ext::metallib_dir());
+  auto kernel = d.get_kernel(kname.str(), lib);
   auto& compute_encoder = d.get_command_encoder(s.index);
   compute_encoder.set_compute_pipeline_state(kernel);
 
-  auto kernel_size = w.shape(1);
+  int kernel_size = static_cast<int>(w.shape(1));
   auto batch_size = x.shape(0);
   auto n_channels = x.shape(1);
   auto seq_len = x.shape(2);
@@ -84,8 +80,8 @@ void Conv1dSwishForward::eval_gpu(const std::vector<array>& inputs, std::vector<
   compute_encoder.set_input_array(w, 1);
   compute_encoder.set_input_array(b, 2);
   compute_encoder.set_output_array(y, 3);
-  compute_encoder.set_bytes(x.strides().data(), 3 * sizeof(size_t), 4);
-  compute_encoder.set_bytes(&kernel_size, kernel_size * sizeof(int), 5);
+  compute_encoder.set_vector_bytes(x.strides(), 4);
+  compute_encoder.set_bytes(kernel_size, 5);
   
 
   // https://developer.apple.com/documentation/metal/compute_passes/calculating_threadgroup_and_grid_sizes

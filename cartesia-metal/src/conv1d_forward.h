@@ -20,8 +20,8 @@ class Conv1dForward : public Primitive {
   void eval_cpu(const std::vector<array>& inputs, std::vector<array>& outputs) override;
   void eval_gpu(const std::vector<array>& inputs, std::vector<array>& outputs) override;
 
-  void print(std::ostream& os) override {
-    os << "Conv1dForward";
+  const char* name() const override {
+    return "Conv1dForward";
   }
 
   void eval(const std::vector<array>& inputs, std::vector<array>& outputs);

@@ -7,6 +7,7 @@
 #include "mlx/utils.h"
 
 #include "src/ssd_update.h"
+#include "src/metal_utils.h"
 
 #ifdef ACCELERATE_NEW_LAPACK
 #include <vecLib/cblas_new.h>
@@ -60,41 +61,30 @@ void SSDUpdate::eval_gpu(const std::vector<array>& inputs, std::vector<array>& o
   assert(inputs.size() == 8);
   assert(outputs.size() == 2);
 
-  auto x = inputs[0];
-  auto dt = inputs[1];
-  auto decay = inputs[2];
-  auto B = inputs[3];
-  auto C = inputs[4];
-  auto D = inputs[5];
-  auto z = inputs[6];
-  auto state = inputs[7];
+  auto& x = inputs[0];
+  auto& dt = inputs[1];
+  auto& decay = inputs[2];
+  auto& B = inputs[3];
+  auto& C = inputs[4];
+  auto& D = inputs[5];
+  auto& z = inputs[6];
+  auto& state = inputs[7];
 
-  auto y = outputs[0];
-  auto next_state = outputs[1];
+  auto& y = outputs[0];
+  auto& next_state = outputs[1];
 
   auto& s = stream();
   auto& d = metal::device(s.device);
 
-  y.set_data(
-    allocator::malloc_or_wait(x.data_size() * y.itemsize()),
-    x.data_size(),
-    x.strides(),
-    x.flags()
-  );
-
-  next_state.set_data(
-    allocator::malloc_or_wait(state.data_size() * state.itemsize()),
-    state.data_size(),
-    state.strides(),
-    state.flags()
-  );
+  y.set_data(allocator::malloc(y.nbytes()));
+  next_state.set_data(allocator::malloc(next_state.nbytes()));
 
   std::ostringstream kname;
   kname << "ssd_update_kernel_";
   kname << type_to_name(x);
-  
-  d.register_library("mlx_ext");
-  auto kernel = d.get_kernel(kname.str(), "mlx_ext");
+
+  auto lib = d.get_library("mlx_ext", cartesia::mlx_ext::metallib_dir());
+  auto kernel = d.get_kernel(kname.str(), lib);
   auto& compute_encoder = d.get_command_encoder(s.index);
   compute_encoder.set_compute_pipeline_state(kernel);
 
@@ -113,16 +103,16 @@ void SSDUpdate::eval_gpu(const std::vector<array>& inputs, std::vector<array>& o
   auto b = x.shape(0);
   auto h = x.shape(1);
   auto dh = x.shape(2);
-  auto state_size = state.shape(3);
   auto g = B.shape(1);
-  auto group_size = h / g;
+  int group_size = static_cast<int>(h / g);
+  int state_size = static_cast<int>(state.shape(3));
 
-  compute_encoder.set_bytes(&group_size, sizeof(size_t), 10);
-  compute_encoder.set_bytes(&state_size, sizeof(size_t), 11);
-  compute_encoder.set_bytes(x.strides().data(), 3 * sizeof(size_t), 12);
-  compute_encoder.set_bytes(dt.strides().data(), 2 * sizeof(size_t), 13);
-  compute_encoder.set_bytes(B.strides().data(), 3 * sizeof(size_t), 14);
-  compute_encoder.set_bytes(state.strides().data(), 4 * sizeof(size_t), 15);
+  compute_encoder.set_bytes(group_size, 10);
+  compute_encoder.set_bytes(state_size, 11);
+  compute_encoder.set_vector_bytes(x.strides(), 12);
+  compute_encoder.set_vector_bytes(dt.strides(), 13);
+  compute_encoder.set_vector_bytes(B.strides(), 14);
+  compute_encoder.set_vector_bytes(state.strides(), 15);
 
   // https://developer.apple.com/documentation/metal/compute_passes/calculating_threadgroup_and_grid_sizes
   MTL::Size grid_dims = MTL::Size(b, h, dh);

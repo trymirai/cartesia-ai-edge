@@ -54,7 +54,7 @@ template <typename T>
     device type* next_state [[buffer(5)]],                      \
     constant const int& kernel_size [[buffer(6)]],              \
     constant const size_t* x_strides [[buffer(7)]],             \
-    constant const size_t* state_strides [[buffer(8)]],         \ 
+    constant const size_t* state_strides [[buffer(8)]],         \
     uint3 grid_idx [[thread_position_in_grid]],                 \
     uint3 grid_size [[threads_per_grid]]); 
 

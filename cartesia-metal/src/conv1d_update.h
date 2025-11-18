@@ -21,8 +21,8 @@ class Conv1dUpdate : public Primitive {
   void eval_cpu(const std::vector<array>& inputs, std::vector<array>& outputs) override;
   void eval_gpu(const std::vector<array>& inputs, std::vector<array>& outputs) override;
 
-  void print(std::ostream& os) override {
-    os << "Conv1dUpdate";
+  const char* name() const override {
+    return "Conv1dUpdate";
   }
 
   void eval(const std::vector<array>& inputs, std::vector<array>& outputs);

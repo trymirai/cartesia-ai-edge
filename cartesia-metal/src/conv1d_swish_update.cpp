@@ -7,6 +7,7 @@
 #include "mlx/utils.h"
 
 #include "src/conv1d_swish_update.h"
+#include "src/metal_utils.h"
 
 #ifdef ACCELERATE_NEW_LAPACK
 #include <vecLib/cblas_new.h>
@@ -57,41 +58,30 @@ void Conv1dSwishUpdate::eval_gpu(const std::vector<array>& inputs, std::vector<a
   assert(inputs.size() == 4);
   assert(outputs.size() == 2);
 
-  auto x = inputs[0];
-  auto w = inputs[1];
-  auto b = inputs[2];
-  auto state = inputs[3];
+  auto& x = inputs[0];
+  auto& w = inputs[1];
+  auto& b = inputs[2];
+  auto& state = inputs[3];
 
-  auto y = outputs[0];
-  auto next_state = outputs[1];
+  auto& y = outputs[0];
+  auto& next_state = outputs[1];
 
   auto& s = stream();
   auto& d = metal::device(s.device);
 
-  y.set_data(
-    allocator::malloc_or_wait(x.data_size() * y.itemsize()),
-    x.data_size(),
-    x.strides(),
-    x.flags()
-  );
-
-  next_state.set_data(
-    allocator::malloc_or_wait(state.data_size() * state.itemsize()),
-    state.data_size(),
-    state.strides(),
-    state.flags()
-  );
+  y.set_data(allocator::malloc(y.nbytes()));
+  next_state.set_data(allocator::malloc(next_state.nbytes()));
 
   std::ostringstream kname;
   kname << "conv1d_swish_update_kernel_";
   kname << type_to_name(x);
-  
-  d.register_library("mlx_ext");
-  auto kernel = d.get_kernel(kname.str(), "mlx_ext");
+
+  auto lib = d.get_library("mlx_ext", cartesia::mlx_ext::metallib_dir());
+  auto kernel = d.get_kernel(kname.str(), lib);
   auto& compute_encoder = d.get_command_encoder(s.index);
   compute_encoder.set_compute_pipeline_state(kernel);
 
-  auto kernel_size = w.shape(1);
+  int kernel_size = static_cast<int>(w.shape(1));
 
   compute_encoder.set_input_array(x, 0);
   compute_encoder.set_input_array(w, 1);
@@ -99,9 +89,9 @@ void Conv1dSwishUpdate::eval_gpu(const std::vector<array>& inputs, std::vector<a
   compute_encoder.set_input_array(state, 3);
   compute_encoder.set_output_array(y, 4);
   compute_encoder.set_output_array(next_state, 5);
-  compute_encoder.set_bytes(&kernel_size, kernel_size * sizeof(int), 6);
-  compute_encoder.set_bytes(x.strides().data(), 2 * sizeof(size_t), 7);
-  compute_encoder.set_bytes(state.strides().data(), 3 * sizeof(size_t), 8);
+  compute_encoder.set_bytes(kernel_size, 6);
+  compute_encoder.set_vector_bytes(x.strides(), 7);
+  compute_encoder.set_vector_bytes(state.strides(), 8);
   
 
   auto batch_size = x.shape(0);

@@ -25,12 +25,12 @@ AUTHOR = "Cartesia, Inc."
 REQUIRES_PYTHON = ">=3.9.0"
 VERSION = main_ns["__version__"]
 REQUIRES = [
-    "mlx==0.22.1",
+    "mlx>=0.29.4",
     "nanobind==2.4.0",
     "transformers>=4.40.0",
     "datasets",
     "torch",
-    "numpy<2",
+    "numpy",
     "requests",
     "huggingface_hub"
 ]
