@@ -1,6 +1,8 @@
 #include <metal_integer>
 #include <metal_math>
 
+using namespace metal;
+
 // #include "mlx/backend/metal/kernels/bf16_math.h"
 
 #include "mlx/backend/metal/kernels/erf.h"
