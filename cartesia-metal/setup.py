@@ -6,7 +6,7 @@ from setuptools import setup
 
 NAME = "cartesia-metal"
 REQUIRES = [
-    "mlx>=0.29.4",
+    "mlx==0.29.4",
     "nanobind==2.4.0",
 ]
 
